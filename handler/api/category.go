@@ -42,25 +42,36 @@ func (ct *categoryAPI) AddCategory(c *gin.Context) {
 }
 
 func (ct *categoryAPI) UpdateCategory(c *gin.Context) {
-	var updatedCategory model.Category
-	if err := c.ShouldBindJSON(&updatedCategory); err != nil {
+	// Mendapatkan ID kategori dari parameter URL
+	idStr, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		// Mengembalikan respons JSON jika ID kategori tidak valid
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid Category ID"})
+		return
+	}
+
+	// Membuat variabel untuk menyimpan data kategori baru
+	var newCategory model.Category
+	// Mengikat data JSON yang diterima dari permintaan ke variabel newCategory
+	if err := c.ShouldBindJSON(&newCategory); err != nil {
+		// Mengembalikan respons JSON jika terjadi kesalahan dalam pengikatan JSON
 		c.JSON(http.StatusBadRequest, model.ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	categoryID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, model.ErrorResponse{Error: "Invalid category ID"})
-		return
-	}
+	// Menetapkan ID kategori baru
+	newCategory.ID = idStr
 
-	err = ct.categoryService.Update(categoryID, updatedCategory)
+	// Memperbarui kategori dengan ID yang sesuai menggunakan service categoryService
+	err = ct.categoryService.Update(idStr, newCategory)
 	if err != nil {
+		// Mengembalikan respons JSON jika terjadi kesalahan saat memperbarui kategori
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, model.SuccessResponse{Message: "update category success"})
+	// Mengembalikan respons JSON jika pembaruan kategori berhasil
+	c.JSON(http.StatusOK, gin.H{"message": "category update success"})
 }
 
 func (ct *categoryAPI) DeleteCategory(c *gin.Context) {
@@ -76,7 +87,7 @@ func (ct *categoryAPI) DeleteCategory(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, model.SuccessResponse{Message: "delete category success"})
+	c.JSON(http.StatusOK, model.SuccessResponse{Message: "category delete success"})
 }
 
 func (ct *categoryAPI) GetCategoryByID(c *gin.Context) {

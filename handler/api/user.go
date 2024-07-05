@@ -4,8 +4,10 @@ import (
 	"a21hc3NpZ25tZW50/model"
 	"a21hc3NpZ25tZW50/service"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 )
 
 type UserAPI interface {
@@ -52,7 +54,6 @@ func (u *userAPI) Register(c *gin.Context) {
 
 func (u *userAPI) Login(c *gin.Context) {
 	var user model.UserLogin
-
 	if err := c.BindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, model.NewErrorResponse("invalid decode json"))
 		return
@@ -63,13 +64,52 @@ func (u *userAPI) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := u.userService.Login(&model.User{Email: user.Email, Password: user.Password})
+	var recordUser = model.User{
+		Email:    user.Email,
+		Password: user.Password,
+	}
+
+	// Melakukan login dan menerima token dari service
+	tokenStringPtr, err := u.userService.Login(&recordUser)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, model.NewErrorResponse("login failed"))
+		c.JSON(http.StatusInternalServerError, model.NewErrorResponse("error internal server"))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": *token})
+	// Mengatur waktu kedaluwarsa token (24 jam dari sekarang)
+	expirationTime := time.Now().Add(24 * time.Hour)
+
+	// Memeriksa dan menguraikan token string untuk memeriksa validitasnya serta mengekstrak klaim-klaimnya
+	token, err := jwt.ParseWithClaims(*tokenStringPtr, &jwt.StandardClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return model.JwtKey, nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, model.NewErrorResponse("error internal server"))
+		return
+	}
+
+	// Memeriksa validitas token dan mengekstrak klaim-klaimnya
+	claims, ok := token.Claims.(*jwt.StandardClaims)
+	if !ok || !token.Valid {
+		c.JSON(http.StatusUnauthorized, model.NewErrorResponse("invalid token"))
+		return
+	}
+
+	// Memperbarui waktu kedaluwarsa dalam klaim-klaim
+	claims.ExpiresAt = expirationTime.Unix()
+
+	// Menyetel token sebagai cookie dalam respons
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:    "session_token",
+		Value:   *tokenStringPtr,
+		Expires: expirationTime,
+	})
+
+	// Memberikan respons dengan ID pengguna dan pesan keberhasilan
+	c.JSON(http.StatusOK, gin.H{
+		"user_id": recordUser.ID,
+		"message": "login success",
+	})
 }
 
 func (u *userAPI) GetUserTaskCategory(c *gin.Context) {
